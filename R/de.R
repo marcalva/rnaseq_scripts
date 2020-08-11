@@ -41,18 +41,24 @@ run_de_all <- function(counts, pheno, covars = NULL, gene_info = NULL,
                        de_method = "edgeR", lfc = 0,  p.adjust = "fdr", 
                        plots = FALSE, 
                        nm_method = "TMM", prior.count = 0.125, min_cpm = 0, 
-                       sfrac = 0.9, dirout = "", verbose = TRUE){
+                       sfrac = 0.9, dirout = "", verbose = TRUE, gz = TRUE){
     require(edgeR)
 
     s <- intersect(colnames(counts), rownames(pheno))
-    s <- intersect(s, rownames(covars))
-    pheno <- pheno[s,]
-    covars <- covars[s,]
-    counts <- counts[,s]
+    if (!is.null(covars)){
+        s <- intersect(s, rownames(covars))
+        covars <- covars[s,,drop=FALSE]
+    }
+    pheno <- pheno[s,,drop=FALSE]
+    counts <- counts[,s,drop=FALSE]
 
-    dat <- as.data.frame(covars)
-    for (i in colnames(pheno)){
-        dat[,i] <- pheno[,i]
+    if (!is.null(covars)){
+        dat <- as.data.frame(covars)
+        for (i in colnames(pheno)){
+            dat[,i] <- pheno[,i]
+        }
+    } else {
+        dat <- pheno
     }
 
 
@@ -62,24 +68,33 @@ run_de_all <- function(counts, pheno, covars = NULL, gene_info = NULL,
 
     y <- calcNormFactors(y, method = nm_method)
 
-    fn <- paste0(dirout, "mds.edgeR.pdf")
-    pdf(fn)
-    plotMDS(y)
-    dev.off()
-
+    if (plots){
+        fn <- paste0(dirout, "mds.edgeR.pdf")
+        pdf(fn)
+        plotMDS(y)
+        dev.off()
+    }
 
     for (p in colnames(pheno)){
         if (verbose){
             message("Testing ", p)
         }
-        ds <- covars
-        ds[,p] <- pheno[,p]
+        if (is.null(covars)){
+            ds <- pheno[,p,drop=FALSE]
+        } else {
+            ds <- covars
+            ds[,p] <- pheno[,p]
+        }
         ds <- model.frame(ds)
         design <- model.matrix(terms(ds), ds)
 
         y <- DGEList(counts = counts[,rownames(design)], genes = gene_info)
         keep <- rowSums(cpm(y) > min_cpm) >= (sfrac * ncol(y))
         y <- y[keep, , keep.lib.sizes=FALSE]
+
+        if (verbose){
+            message("testing ", nrow(y), " genes across ", ncol(y), " samples")
+        }
 
         y <- calcNormFactors(y, method = nm_method)
         y <- estimateDisp(y, as.data.frame(ds), robust=TRUE)
@@ -95,7 +110,14 @@ run_de_all <- function(counts, pheno, covars = NULL, gene_info = NULL,
             deg <- cbind(gene_info[rownames(de),], de)
 
             fn <- paste0(dirout, p, ".edgeR.txt")
-            write.table(deg, fn, row.names = T, col.names = NA, quote = F, sep = "\t")
+            if (gz){
+                fn <- paste0(fn, ".gz")
+                gz1 <- gzfile(fn, "w")
+                write.table(deg, gz1, row.names = T, col.names = NA, quote = F, sep = "\t")
+                close(gz1)
+            } else {
+                write.table(deg, fn, row.names = T, col.names = NA, quote = F, sep = "\t")
+            }
         } else if (de_method == "limma"){
             ret <- runlimma(y, design, prior.count = prior.count, lfc = lfc, 
                             p.adjust = p.adjust)
@@ -109,7 +131,14 @@ run_de_all <- function(counts, pheno, covars = NULL, gene_info = NULL,
             deg <- cbind(gene_info[rownames(de),], de)
 
             fn <- paste0(dirout, p, ".limma.txt")
-            write.table(deg, fn, row.names = T, col.names = NA, quote = F, sep = "\t")
+            if (gz){
+                fn <- paste0(fn, ".gz")
+                gz1 <- gzfile(fn, "w")
+                write.table(deg, gz1, row.names = T, col.names = NA, quote = F, sep = "\t")
+                close(gz1)
+            } else {
+                write.table(deg, fn, row.names = T, col.names = NA, quote = F, sep = "\t")
+            }
         }
         else{
             stop(sQuote(de_method), " must be one of ", sQuote(edgeR)," or ", sQuote(limma))
