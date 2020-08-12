@@ -36,6 +36,7 @@ read_counts <- function(p, gene_col = 1, sep = "."){
 sce_feat_pct <- function(x, ids, colname){
     ids <- lapply(ids, function(i) grep(i, rownames(x@counts), value = TRUE))
     ids <- unlist(ids)
+    ids <- intersect(ids, rownames(x@counts))
     x <- get_gene_pct(x = x, genes = ids, name = colname)
     return(x)
 }
@@ -63,8 +64,7 @@ sce_rm_feat <- function(x, ids){
 #' Initialize DIEM SCE object from STARSolo output.
 #'
 #' @param sample_id Sample ID.
-#' @param data_dir Directory prefix to place DIEM SCE object.
-#' @param exp_dir Directory prefix to place results.
+#' @param data_dir Directory prefix to place DIEM SCE object. Appends sample ID.
 #' @param star_dir Base directory with STAR results. This looks for the 
 #'  results in "solo_dir".
 #' @param solo_dir Directory with STARsolo counts.
@@ -81,7 +81,6 @@ sce_rm_feat <- function(x, ids){
 #'  specified by data_dir/sample_id/.
 diem.init <- function(sample_id, 
                       data_dir, 
-                      exp_dir, 
                       star_dir, 
                       solo_dir = "/Solo.out/GeneFull/raw/",
                       pct_feat = NULL, 
@@ -93,7 +92,7 @@ diem.init <- function(sample_id,
                       sce_file = "sce.rds"){
 
     dir_counts <- file.path(star_dir, solo_dir)
-    counts <- read_counts(dir_count)
+    counts <- read_counts(dir_counts)
 
     if (!is.null(drop_prepend)){
         colnames(counts) <- paste0(drop_prepend, drop_delim, colnames(counts))
@@ -115,8 +114,8 @@ diem.init <- function(sample_id,
     sce <- filter_genes(sce, cpm_thresh = cpm_thresh)
 
     sce_dir <- file.path(data_dir, sample_id)
-    dir.create(sce_dir, recursive = TRUE, showWarnings = FALSE)
-    sce_f <- file.path(sce_dir, sce_file)
+    dir.create(data_dir, recursive = TRUE, showWarnings = FALSE)
+    sce_f <- file.path(data_dir, sce_file)
     saveRDS(sce, sce_f)
 }
 
@@ -126,7 +125,6 @@ diem.init <- function(sample_id,
 #'
 #' @param sample_id Sample ID.
 #' @param data_dir Directory prefix to place DIEM SCE object.
-#' @param exp_dir Directory prefix to place results.
 #' @param n_expect Expected number of droplets.
 #' @param quant Quantile threshold.
 #' @param k_init Initial number of clusters K for clustering.
@@ -144,7 +142,6 @@ diem.init <- function(sample_id,
 #'  specified by data_dir/sample_id/.
 diem.clust <- function(sample_id, 
                        data_dir, 
-                       exp_dir, 
                        n_expect = 10e3, 
                        quant = 0.99, 
                        k_init = 30, 
@@ -156,8 +153,7 @@ diem.clust <- function(sample_id,
                        n_threads = 1, 
                        sce_file = "sce.rds"){
 
-    sce_dir <- file.path(data_dir, sample_id)
-    sce_f <- file.path(sce_dir, sce_file)
+    sce_f <- file.path(data_dir, sce_file)
     sce <- readRDS(sce_f)
 
     drop_dat <- droplet_data(sce)
