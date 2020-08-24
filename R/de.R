@@ -147,3 +147,74 @@ run_de_all <- function(counts, pheno, covars = NULL, gene_info = NULL,
 }
 
 
+#=================================================
+#=================================================
+
+#' Run DE using a linear model
+#'
+#' @param counts Normalized expression data. Genes are in rows and 
+#'  samples are in columns.
+#' @param design Design matrix. The last column is the variable of 
+#'  interest. Note this design matrix must include the intercept term, 
+#'  as the lm function is called without an intercept.
+#' @param p_adj Adjust p values using this method from \link{p.adjust}.
+#' @param p_filter Remove genes with an adjusted p-value greater than this 
+#'  value.
+#' @param gene_info Data frame cotnaining gene annotations to append to 
+#'  results.
+#' @param save2file Boolean indicating whether to save results to file.
+#' @param dirout Output directory.
+#' @param fn File name.
+#' @param gz Boolean indicating whether to gzip the output file.
+run_de_lm <- function(counts, 
+                      design, 
+                      p_adj = "fdr", 
+                      p_filter = 1, 
+                      gene_info = NULL,
+                      save2file = TRUE, 
+                      dirout = "./", 
+                      fn = "de.lm.txt", 
+                      gz = TRUE){
+
+    if (nrow(design) != ncol(counts)){
+        stop("Number of rows in design must be the same as number of columns in counts")
+    }
+
+    detable <- apply(counts, 1, function(x){
+                     lmr <- lm(x ~ 0 + design)
+                     lmrs <- summary(lmr)
+                     coefs <- lmrs$coefficients
+                     nr <- nrow(coefs)
+                     ret <- c("Effect" = coefs[nr, 1], 
+                              "p" = coefs[nr, 4])
+                     return(ret) })
+    detable <- t(detable)
+    detable <- as.data.frame(detable)
+    detable[,"p.adj"] <- p.adjust(detable[,"p"], method = p_adj)
+    pk <- detable[,"p.adj"] < p_filter
+    detable <- detable[pk,,drop=FALSE]
+    o <- order(detable[,"p"], decreasing = FALSE)
+    detable <- detable[o,,drop=FALSE]
+
+    if (!is.null(gene_info))
+        detable <- cbind(gene_info[rownames(detable),], detable)
+
+    if (save2file){
+        dir.create(dirout, showWarnings = FALSE, recursive = TRUE)
+        fn <- file.path(dirout, fn)
+        if (gz){
+            fn <- paste0(fn, ".gz")
+            gz1 <- gzfile(fn, "w")
+            write.table(detable, gz1, row.names = T, col.names = NA, quote = F, sep = "\t")
+            close(gz1)
+        } else {
+            write.table(detable, fn, row.names = T, col.names = NA, quote = F, sep = "\t")
+        }
+    }
+
+    return(detable)
+}
+
+
+
+

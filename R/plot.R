@@ -211,7 +211,8 @@ plot_umap_gene_2c <- function(x,
                            alpha=1, 
                            size=3,
                            shape = 16, 
-                           rand=TRUE){
+                           rand = TRUE, 
+                           order_e = FALSE){
     require(ggplot2)
     require(RColorBrewer)
 
@@ -224,11 +225,17 @@ plot_umap_gene_2c <- function(x,
         datf[,"feat"] <- log1p(datf[,"feat"])
     }
     if (rand) datf <- datf[sample(rownames(datf)),]
+    if (order_e){
+        o <- order(datf[,"feat"], decreasing = FALSE)
+        datf <- datf[o,,drop=FALSE]
+    }
+
     p <- ggplot(datf, aes(x=UMAP1, y=UMAP2, color=feat)) + 
-    geom_point(alpha=alpha, shape = shape, size = size) + 
-    theme_classic() + ggtitle(gene) + 
-    theme(axis.text=element_blank(), axis.ticks=element_blank()) +
-    scale_color_gradient(low=low, high=high, name=legend_title)
+        geom_point(alpha=alpha, shape = shape, size = size) + 
+        theme_classic() + 
+        ggtitle(gene) + 
+        theme(axis.text=element_blank(), axis.ticks=element_blank()) +
+        scale_color_gradient(low=low, high=high, name=legend_title)
     return(p)
 }
 
