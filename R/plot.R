@@ -5,6 +5,61 @@ gg_color_hue <- function(n) {
     hcl(h = hues, l = 65, c = 100)[1:n]
 }
 
+#' Plot a heatmap with asterisks in place for p-values
+#' 
+#' x is a data frame with values to be plotted.
+#' p is a data frame with p-values
+heatmap.p <- function(x, p, legend_name = "Value",
+                      low = "steelblue4", mid="white", high = "firebrick4"){
+    require(ggplot2)
+    require(reshape2)
+    x <- as.matrix(x)
+    p <- as.matrix(p)
+    xdf <- reshape2::melt(x)
+    xdf <- xdf[!is.na(xdf$value),]
+    pmark <- matrix("", nrow = nrow(p), ncol = ncol(p))
+    plims <- c(0.05, 0.01, 0.001)
+    pmarks <- c("*", "**", "***")
+    for (k in seq_along(plims)){
+        pmark[p < plims[k]] <- pmarks[k]
+    }
+    plong <- reshape2::melt(pmark)
+    xdf[,"Significance"] <- plong$value
+
+    ret <- ggplot(xdf, aes_string(x = "Var1", y = "Var2")) +
+    geom_tile(aes(fill = value)) +
+    scale_fill_gradient2(low=low, mid=mid, high=high,
+                         name = legend_name) +
+    theme_classic() + labs(x="", y="") +
+    theme(axis.ticks = element_blank(), panel.background = element_blank(),
+          axis.text.x = element_text(size = 10, angle = 45, hjust = 1, colour = "grey50")) +
+    geom_text(aes_string(label = "Significance"), size=4)
+
+    return(ret)
+}
+
+#' Plot a heatmap
+#' 
+#' x is a data frame with values to be plotted.
+hmp <- function(x, clow = "firebrick4", cmid = "white", chigh = "steelblue4",
+                limits = NULL, leg_title = waiver()){
+    require(ggplot2)
+    require(reshape2)
+    x <- as.matrix(x)
+    xdf <- reshape2::melt(x)
+    xdf <- xdf[!is.na(xdf$value),]
+
+    ret <- ggplot(xdf, aes_string(x = "Var1", y = "Var2")) +
+    geom_tile(aes(fill = value)) +
+    scale_fill_gradient2(low = clow, mid = cmid, high = chigh,
+                         limits = limits, name = leg_title) +
+    theme_classic() + labs(x="", y="") +
+    theme(axis.ticks = element_blank(), panel.background = element_blank(),
+          axis.text.x = element_text(size = 10, angle = 45, hjust = 1, colour = "grey50"))
+
+    return(ret)
+}
+
 #' box plot
 plot_box <- function(datf, x, y){
 	require(reshape2)

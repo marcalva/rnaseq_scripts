@@ -123,6 +123,8 @@ cluster_tom <- function(x,
                         plots = TRUE, 
                         plot_dir = "./", 
                         dendro_plot = "dendro.pdf", 
+                        w = 7, 
+                        h = 5,
                         me_plot = "me_clust.pdf", 
                         nThreads = NULL){
 
@@ -143,17 +145,6 @@ cluster_tom <- function(x,
                                  minClusterSize = minModuleSize)
     dynamicColors <- labels2colors(dynamicMods)
 
-    if (plots){
-        dir.create(plot_dir, showWarnings = FALSE, recursive = TRUE)
-        pfile <- paste0(plot_dir, dendro_plot)
-        pdf(pfile, width = 7, height = 5)
-        plotDendroAndColors(geneTree, dynamicColors, "Dynamic Tree Cut",
-                            dendroLabels = FALSE, hang = 0.03,
-                            addGuide = TRUE, guideHang = 0.05,
-                            main = "Gene dendrogram and module colors")
-        dev.off()
-    }
-
     MEList <- moduleEigengenes(x, colors = dynamicColors)
     MEs <- MEList$eigengenes
     MEDiss <- 1 - cor(MEs)
@@ -166,10 +157,21 @@ cluster_tom <- function(x,
     if (plots){
         dir.create(plot_dir, showWarnings = FALSE, recursive = TRUE)
         pfile <- paste0(plot_dir, me_plot)
-        pdf(pfile, width = 7, height = 5)
+        pdf(pfile, width = w, height = h)
         plot(METree, main = "Clustering of module eigengenes", 
              xlab = "", sub = "")
         abline(h = MEDissThres, col = "red")
+        dev.off()
+    }
+
+    if (plots){
+        dir.create(plot_dir, showWarnings = FALSE, recursive = TRUE)
+        pfile <- paste0(plot_dir, dendro_plot)
+        pdf(pfile, width = w, height = h)
+        plotDendroAndColors(geneTree, merged$colors, "Dynamic Tree Cut",
+                            dendroLabels = FALSE, hang = 0.03,
+                            addGuide = TRUE, guideHang = 0.05,
+                            main = "Gene dendrogram and module colors")
         dev.off()
     }
 
@@ -177,4 +179,98 @@ cluster_tom <- function(x,
 
     return(merged)
 }
+
+#' Plot variance explained by each module eigengene
+plot_me_ve <- function(x, gene_lab, order_ve = TRUE, ret = TRUE){
+    require(ggplot2)
+    mods <- unique(gene_lab)
+    ve <- sapply(mods, function(m){
+                   g <- names(gene_lab)[gene_lab == m]
+                   pcs <- prcomp(x[,g,drop=FALSE], scale.=TRUE, center = TRUE)
+                   vars <- pcs$sdev^2
+                   vars <- vars / sum(vars)
+                   return(vars[1])
+                            })
+    datf <- data.frame("ME" = mods, 
+                       "VarExpl" = ve)
+    if (order_ve){
+        o <- order(datf[,"VarExpl"], decreasing = TRUE)
+        datf <- datf[o,,drop=FALSE]
+    }
+    datf[,"ME"] <- factor(datf[,"ME"], levels = datf[,"ME"])
+
+    p <- ggplot(datf, aes(x = ME, y = VarExpl)) + 
+        geom_point() + 
+        theme_classic() + 
+        theme(axis.text.x = element_text(hjust = 1, angle = 90)) + 
+        xlab("Module eigengene") + 
+        ylab("Variance explained")
+
+    if (ret){
+        return(p)
+    } else {
+        print(p)
+    }
+}
+
+#' Plot variance explained by each module eigengene
+plot_m_ngene <- function(gene_lab, order_n = TRUE, ret = TRUE){
+    require(ggplot2)
+    ngene <- tapply(names(gene_lab), gene_lab, length)
+    datf <- data.frame("Module" = names(ngene), 
+                       "NumGene" = ngene)
+    if (order_n){
+        o <- order(datf[,"NumGene"], decreasing = TRUE)
+        datf <- datf[o,,drop=FALSE]
+    }
+    datf[,"Module"] <- factor(datf[,"Module"], levels = datf[,"Module"])
+
+    p <- ggplot(datf, aes(x = Module, y = NumGene)) + 
+        geom_bar(stat = "identity") + 
+        theme_classic() + 
+        theme(axis.text.x = element_text(hjust = 1, angle = 90)) + 
+        xlab("Module") + 
+        ylab("Number of genes")
+
+    if (ret){
+        return(p)
+    } else {
+        print(p)
+    }
+}
+
+cor_mat <- function(x, y){
+
+    cor_r <- matrix(nrow = ncol(x), ncol = ncol(y))
+    rownames(cor_r) <- colnames(x)
+    colnames(cor_r) <- colnames(y)
+    cor_p <- cor_r
+
+    for (i1 in 1:ncol(x)){
+        for (i2 in 1:ncol(y)){
+            r <- cor.test(x[,i1], y[,i2], use = "p")
+            cor_r[i1, i2] <- r$estimate
+            cor_p[i1, i2] <- r$p.value
+        }
+    }
+
+    return(list("est" = cor_r, "p" = cor_p))
+}
+
+
+#' Correlate module eigengenes with traits
+#'
+#' @param MEs Data frame of module eigengenes. Samples in rows, MEs 
+#'  in columns
+#' @param traits Data frame of traits. Samples in rows, traits in columns.
+#'
+cor_me_trait <- function(MEs, traits){
+    si <- intersect(rownames(MEs), rownames(traits))
+    MEs <- MEs[si,,drop=FALSE]
+    traits <- traits[si,,drop=FALSE]
+    cors <- cor_mat(MEs, traits)
+
+    return(cors)
+}
+
 
