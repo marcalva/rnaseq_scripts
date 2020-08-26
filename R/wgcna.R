@@ -107,7 +107,7 @@ get_adj_tom <- function(x,
     TOM <- TOMsimilarity(adj, TOMType = type)
     dissTOM <- 1 - TOM
 
-    return(dissTOM)
+    return(list("adj" = adj, "dissTOM" = dissTOM))
 }
 
 #' Clustering
