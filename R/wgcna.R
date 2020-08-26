@@ -113,8 +113,17 @@ get_adj_tom <- function(x,
 #' Clustering
 #'
 #'
-cluster_tom <- function(dissTOM, 
+cluster_tom <- function(x, 
+                        dissTOM, 
                         method = "average", 
+                        minModuleSize = 30, 
+                        deepSplit = 2, 
+                        pamRespectsDendro = FALSE, 
+                        MEDissThres = 0.25,
+                        plots = TRUE, 
+                        plot_dir = "./", 
+                        dendro_plot = "dendro.pdf", 
+                        me_plot = "me_clust.pdf", 
                         nThreads = NULL){
 
     require(WGCNA)
@@ -124,11 +133,48 @@ cluster_tom <- function(dissTOM,
 
     enableWGCNAThreads(nThreads = nThreads)
 
-    geneTree = hclust(as.dist(dissTOM), method = method)
+    geneTree <- hclust(as.dist(dissTOM), method = method)
 
-    
+    # returns a vector of labels assigning each gene to a cluster
+    dynamicMods <- cutreeDynamic(dendro = geneTree, 
+                                 distM = dissTOM, 
+                                 deepSplit = deepSplit, 
+                                 pamRespectsDendro = pamRespectsDendro, 
+                                 minClusterSize = minModuleSize)
+    dynamicColors <- labels2colors(dynamicMods)
 
+    if (plots){
+        dir.create(plot_dir, showWarnings = FALSE, recursive = TRUE)
+        pfile <- paste0(plot_dir, dendro_plot)
+        pdf(pfile, width = 7, height = 5)
+        plotDendroAndColors(geneTree, dynamicColors, "Dynamic Tree Cut",
+                            dendroLabels = FALSE, hang = 0.03,
+                            addGuide = TRUE, guideHang = 0.05,
+                            main = "Gene dendrogram and module colors")
+        dev.off()
+    }
 
+    MEList <- moduleEigengenes(x, colors = dynamicColors)
+    MEs <- MEList$eigengenes
+    MEDiss <- 1 - cor(MEs)
+    METree <- hclust(as.dist(MEDiss), method = "average")
+    merged <- mergeCloseModules(x, 
+                                dynamicColors, 
+                                cutHeight = MEDissThres, 
+                                verbose = 3)
 
+    if (plots){
+        dir.create(plot_dir, showWarnings = FALSE, recursive = TRUE)
+        pfile <- paste0(plot_dir, me_plot)
+        pdf(pfile, width = 7, height = 5)
+        plot(METree, main = "Clustering of module eigengenes", 
+             xlab = "", sub = "")
+        abline(h = MEDissThres, col = "red")
+        dev.off()
+    }
 
+    names(merged$colors) <- colnames(x)
+
+    return(merged)
 }
+
