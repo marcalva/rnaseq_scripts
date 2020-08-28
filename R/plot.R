@@ -198,6 +198,7 @@ plot_umap_c <- function(x,
                         trans = "identity", 
                         alpha=1, 
                         size = 1,
+                        legend_pt_size = 1, 
                         shape = 16, 
                         rand=TRUE){
     require(ggplot2)
@@ -207,13 +208,15 @@ plot_umap_c <- function(x,
                        UMAP2=x@reductions$umap@cell.embeddings[,"UMAP_2"])
     if (rand) datf <- datf[sample(rownames(datf)),]
     p <- ggplot(datf, aes(x=UMAP1, y=UMAP2, color=feat)) + 
-    geom_point(size = size, alpha=alpha, shape = shape) + 
-    theme_classic() +
-    theme(axis.text=element_blank(), axis.ticks=element_blank()) +
-    scale_color_gradient(low=low, 
-                         high=high, 
-                         trans = trans, 
-                         name=legend_title)
+        geom_point(size = size, alpha=alpha, shape = shape) + 
+        theme_classic() +
+        theme(axis.text=element_blank(), axis.ticks=element_blank()) +
+        scale_color_gradient(low=low, 
+                             high=high, 
+                             trans = trans, 
+                             name=legend_title) + 
+        guides(colour = guide_legend(override.aes = list(size=legend_pt_size, 
+                                                         alpha = 1)))
     return(p)
 }
 
@@ -227,6 +230,7 @@ plot_umap_d <- function(x,
                         legend=TRUE, 
                         alpha=1, 
                         size=2,
+                        legend_pt_size = 1,
                         shape = 16, 
                         rand=TRUE){
     require(ggplot2)
@@ -245,9 +249,11 @@ plot_umap_d <- function(x,
         mycolors <- colors
     }
     p <- ggplot(datf, aes(x=UMAP1, y=UMAP2)) + 
-    geom_point(aes(color=factor(feat)), alpha=alpha, shape = shape, size=size) + 
-    theme_classic() + scale_color_manual(values = mycolors, name = legend_title) + 
-    theme(axis.text=element_blank(), axis.ticks=element_blank(), text=element_text(size=20))
+        geom_point(aes(color=factor(feat)), alpha=alpha, shape = shape, size=size) + 
+        theme_classic() + scale_color_manual(values = mycolors, name = legend_title) + 
+        theme(axis.text=element_blank(), axis.ticks=element_blank(), text=element_text(size=20)) + 
+        guides(colour = guide_legend(override.aes = list(size=legend_pt_size, 
+                                                         alpha = 1)))
     if (!legend){
         p <- p + theme(legend.position = "none")
     }
