@@ -1,4 +1,34 @@
 
+#' Save a data frame to file
+save2file <- function(datf, 
+                      dirout = "./", 
+                      fn = "datf.txt", 
+                      gz = FALSE, 
+                      row.names = TRUE, 
+                      col.names = NA, 
+                      quote = FALSE, 
+                      sep = "\t"){
+    dir.create(dirout, showWarnings = FALSE, recursive = TRUE)
+    fn <- file.path(dirout, fn)
+    if (gz){
+        fn <- paste0(fn, ".gz")
+        gz1 <- gzfile(fn, "w")
+        write.table(datf, 
+                    gz1, 
+                    row.names = row.names, 
+                    col.names = col.names, 
+                    quote = quote, 
+                    sep = sep)
+        close(gz1)
+    } else {
+        write.table(datf, 
+                    fn, 
+                    row.names = row.names, 
+                    col.names = col.names, 
+                    quote = quote, 
+                    sep = sep)
+    }
+}
 
 #=================================================
 #=================================================
@@ -152,11 +182,19 @@ run_de_all <- function(counts, pheno, covars = NULL, gene_info = NULL,
 
 #' Run DE using a linear model
 #'
+#' Given a gene by sample matrix \code{counts} and a design matrix
+#' \code{design}, run a linear model for each gene. Returns the 
+#' coefficients and p-value for the terms specified by \code{cf} 
+#' in the design matrix. The 
+#' model is run with \code{lm(x ~ 0 + design)}.
+#'
 #' @param counts Normalized expression data. Genes are in rows and 
 #'  samples are in columns.
 #' @param design Design matrix. The last column is the variable of 
 #'  interest. Note this design matrix must include the intercept term, 
 #'  as the lm function is called without an intercept.
+#' @param cf Coefficients to return. By default, returns the last term 
+#'  in the design matrix.
 #' @param p_adj Adjust p values using this method from \link{p.adjust}.
 #' @param p_filter Remove genes with an adjusted p-value greater than this 
 #'  value.
@@ -166,10 +204,12 @@ run_de_all <- function(counts, pheno, covars = NULL, gene_info = NULL,
 #' @param dirout Output directory.
 #' @param fn File name.
 #' @param gz Boolean indicating whether to gzip the output file.
+#' 
+#' @return A data frame with one gene per row.
 run_de_lm <- function(counts, 
                       design, 
+                      cf = NULL, 
                       p_adj = "fdr", 
-                      p_filter = 1, 
                       gene_info = NULL,
                       save2file = TRUE, 
                       dirout = "./", 
@@ -180,41 +220,43 @@ run_de_lm <- function(counts,
         stop("Number of rows in design must be the same as number of columns in counts")
     }
 
+    if (is.null(cf)) cf <- ncol(design)
+    c_names <- sapply(cf, function(i){
+                      c(paste0(colnames(design)[i], "_effect"), 
+                        paste0(colnames(design)[i], "_p")) })
     detable <- apply(counts, 1, function(x){
                      lmr <- lm(x ~ 0 + design)
                      lmrs <- summary(lmr)
                      coefs <- lmrs$coefficients
-                     nr <- nrow(coefs)
-                     ret <- c("Effect" = coefs[nr, 1], 
-                              "p" = coefs[nr, 4])
+                     ret <- as.vector(t(coefs[cf, c(1,4)]))
+                     names(ret) <- c_names
                      return(ret) })
     detable <- t(detable)
     detable <- as.data.frame(detable)
-    detable[,"p.adj"] <- p.adjust(detable[,"p"], method = p_adj)
-    pk <- detable[,"p.adj"] < p_filter
-    detable <- detable[pk,,drop=FALSE]
-    o <- order(detable[,"p"], decreasing = FALSE)
-    detable <- detable[o,,drop=FALSE]
 
+    # Adjust p-values
+    for (i in cf){
+        cname <- paste0(colnames(design)[i], "_p")
+        cname2 <- paste0(colnames(design)[i], "_p.adj")
+        detable[,cname2] <- p.adjust(detable[,cname], method = p_adj)
+    }
+
+    # Re-order columns
+    reo <- c()
+    for (i in cf){
+        addto <- c(paste0(colnames(design)[i], "_effect"), 
+                   paste0(colnames(design)[i], "_p"),
+                   paste0(colnames(design)[i], "_p.adj"))
+        reo <- c(reo, addto)
+    }
+    detable <- detable[,reo]
+
+    # Add anotations
     if (!is.null(gene_info))
         detable <- cbind(gene_info[rownames(detable),], detable)
 
-    if (save2file){
-        dir.create(dirout, showWarnings = FALSE, recursive = TRUE)
-        fn <- file.path(dirout, fn)
-        if (gz){
-            fn <- paste0(fn, ".gz")
-            gz1 <- gzfile(fn, "w")
-            write.table(detable, gz1, row.names = T, col.names = NA, quote = F, sep = "\t")
-            close(gz1)
-        } else {
-            write.table(detable, fn, row.names = T, col.names = NA, quote = F, sep = "\t")
-        }
-    }
-
     return(detable)
 }
-
 
 
 
