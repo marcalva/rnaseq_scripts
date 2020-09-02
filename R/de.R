@@ -200,21 +200,13 @@ run_de_all <- function(counts, pheno, covars = NULL, gene_info = NULL,
 #'  value.
 #' @param gene_info Data frame cotnaining gene annotations to append to 
 #'  results.
-#' @param save2file Boolean indicating whether to save results to file.
-#' @param dirout Output directory.
-#' @param fn File name.
-#' @param gz Boolean indicating whether to gzip the output file.
 #' 
 #' @return A data frame with one gene per row.
 run_de_lm <- function(counts, 
                       design, 
                       cf = NULL, 
                       p_adj = "fdr", 
-                      gene_info = NULL,
-                      save2file = TRUE, 
-                      dirout = "./", 
-                      fn = "de.lm.txt", 
-                      gz = TRUE){
+                      gene_info = NULL){
 
     if (nrow(design) != ncol(counts)){
         stop("Number of rows in design must be the same as number of columns in counts")
