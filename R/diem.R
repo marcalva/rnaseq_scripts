@@ -59,12 +59,65 @@ sce_rm_feat <- function(x, ids){
     return(x)
 }
 
+#' Initialize DIEM from a counts matrix
+#'
+#' Initialize DIEM SCE object from a counts matrix
+#'
+#' @param counts A sparse matrix containing the read/UMI counts.
+#' @param sample_id Sample ID.
+#' @param data_dir Directory prefix to place DIEM SCE object.
+#' @param pct_feat A names character list. Each element is a character 
+#'  vector that contains the feature IDs to calculate the percentage of. 
+#'  The names contain the column IDs to place the percentages in.
+#' @param genes_rm Character vector containing genes to remove.
+#' @param drop_prepend String to prepend droplet IDs, for example the 
+#'  sample ID
+#' @param drop_delim Delimiter for drop_prepend (";" is the default).
+#' @param min_counts Minimum counts for DIEM test set.
+#' @param cpm_thresh Only include genes with at least this CPM.
+#' @param sce_file File name for SCE object. Will be saved in a directory 
+#'  specified by data_dir/sample_id/.
+diem.init.counts <- function(counts, 
+                             sample_id, 
+                             data_dir, 
+                             pct_feat = NULL, 
+                             genes_rm = NULL, 
+                             drop_prepend = NULL, 
+                             drop_delim = ';', 
+                             min_counts = 100, 
+                             cpm_thresh = 0, 
+                             sce_file = "sce.rds"){
+
+    if (!is.null(drop_prepend)){
+        colnames(counts) <- paste0(drop_prepend, drop_delim, colnames(counts))
+    }
+
+    sce <- create_SCE(counts, name = sample_id)       
+
+    if (!is.null(pct_feat)){
+        for (i in names(pct_feat)){
+            sce <- sce_feat_pct(sce, pct_feat[[i]], i)
+        }
+    }
+
+    if (!is.null(genes_rm)){
+        sce <- sce_rm_feat(sce, genes_rm)
+    }
+
+    sce <- set_debris_test_set(sce, min_counts = min_counts)
+    sce <- filter_genes(sce, cpm_thresh = cpm_thresh)
+
+    dir.create(data_dir, recursive = TRUE, showWarnings = FALSE)
+    sce_f <- file.path(data_dir, sce_file)
+    saveRDS(sce, sce_f)
+}
+
 #' Initialize DIEM
 #'
 #' Initialize DIEM SCE object from STARSolo output.
 #'
 #' @param sample_id Sample ID.
-#' @param data_dir Directory prefix to place DIEM SCE object. Appends sample ID.
+#' @param data_dir Directory prefix to place DIEM SCE object.
 #' @param star_dir Base directory with STAR results. This looks for the 
 #'  results in "solo_dir".
 #' @param solo_dir Directory with STARsolo counts.
@@ -110,10 +163,9 @@ diem.init <- function(sample_id,
         sce <- sce_rm_feat(sce, genes_rm)
     }
 
-    sce <- set_debris_test_set(sce, min_counts = 100)
+    sce <- set_debris_test_set(sce, min_counts = min_counts)
     sce <- filter_genes(sce, cpm_thresh = cpm_thresh)
 
-    sce_dir <- file.path(data_dir, sample_id)
     dir.create(data_dir, recursive = TRUE, showWarnings = FALSE)
     sce_f <- file.path(data_dir, sce_file)
     saveRDS(sce, sce_f)
@@ -194,8 +246,7 @@ diem.markers <- function(sample_id,
                          scale_factor = 1e3, 
                          sce_file = "sce.rds"){
 
-    sce_dir <- file.path(data_dir, sample_id)
-    sce_f <- file.path(sce_dir, sce_file)
+    sce_f <- file.path(data_dir, sce_file)
     sce <- readRDS(sce_f)
 
     dir.create(marker_dir, recursive = TRUE, showWarnings = FALSE)
@@ -229,8 +280,7 @@ diem.plot.clust <- function(sample_id,
                             plot_feat, 
                             logt = NULL, 
                             sce_file = "sce.rds"){
-    sce_dir <- file.path(data_dir, sample_id)
-    sce_f <- file.path(sce_dir, sce_file)
+    sce_f <- file.path(data_dir, sce_file)
     sce <- readRDS(sce_f)
     
     dir.create(plot_dir, recursive = TRUE, showWarnings = FALSE)
@@ -247,14 +297,91 @@ diem.plot.clust <- function(sample_id,
     }
                    
     # Plot number droplets in clusters
-    p <- ggplot(sce@test_data, aes(Cluster)) + 
-        geom_bar() + 
+    # Plot n_genes by cluster
+    testdat <- sce@test_data
+    avg_genes <- tapply(testdat[,"n_genes"], testdat[,"Cluster"], mean)
+    avg_genes <- sort(avg_genes)
+    lv <- names(avg_genes)
+    testdat[,"Cluster"] <- factor(testdat[,"Cluster"])
+    testdat[,"Cluster"] <- factor(testdat[,"Cluster"], levels = lv)
+
+    p <- ggplot(testdat, aes(x = Cluster, y = n_genes)) +
+        geom_boxplot(outlier.alpha = 0.1, outlier.size = 0.5) +
+        scale_y_log10() +
         theme_minimal() + 
-        xlab("Cluster") + ylab("Number of Droplets") + 
-        ggtitle(sample)
-    
-    ofn <- paste0(plot_prefix, "cluster.n_droplets.jpeg")
-    ggsave(ofn, width = 5, height = 5)
+        ggtitle(sample_id)
+    ggsave(paste0(plot_dir, "cluster.n_genes.jpeg"),
+                  width = 5, height = 3, dpi = 300)
+}
+
+#' Plot cluster means of indicated features
+#'
+#' @param sce SCE object/
+#' @param plot_feat List of character vectors, each of length 2 containing 
+#'  x and y variables.
+#' @param logt List of boolean vectors, each of length 2 specifying 
+#'
+#' @return List of ggplot objects
+diem.plot.clust <- function(sce,
+                            plot_feat, 
+                            logt = NULL){
+    require(diem)
+    require(ggplot2)
+    pl <- list()
+    for (i in 1:length(plot_feat)){
+        x <- plot_feat[[i]][1]
+        y <- plot_feat[[i]][2]
+        p <- plot_clust(sce, 
+                        feat_x = x, feat_y = y,
+                        log_x = logt[[i]][1], log_y = logt[[i]][2], 
+                        ret = TRUE) + 
+            ggtitle(sce@name)
+        pl[[i]] <- p
+    }
+                   
+    return(pl)
+}
+
+#' Plot number of genes in droplet per cluster.
+#'
+#' @param sce SCE object.
+#'
+#' @return a ggplot2 object
+diem.plt.cl.ng <- function(sce){
+    testdat <- sce@test_data
+    avg_genes <- tapply(testdat[,"n_genes"], testdat[,"Cluster"], mean)
+    avg_genes <- sort(avg_genes)
+    lv <- names(avg_genes)
+    testdat[,"Cluster"] <- factor(testdat[,"Cluster"])
+    testdat[,"Cluster"] <- factor(testdat[,"Cluster"], levels = lv)
+
+    p <- ggplot(testdat, aes(x = Cluster, y = n_genes)) +
+        geom_boxplot(outlier.alpha = 0.1, outlier.size = 0.5) +
+        scale_y_log10() +
+        theme_minimal() + 
+        ggtitle(sce@name)
+    return(p)
+}
+
+#' Plot number of droplets per cluster.
+#'
+#' @param sce SCE object.
+#'
+#' @return a ggplot2 object
+diem.plt.cl.nd <- function(sce){
+    testdat <- sce@test_data
+    n_d <- tapply(testdat[,"Cluster"], testdat[,"Cluster"], length)
+    n_d <- sort(n_d, decreasing = TRUE)
+    lv <- names(n_d)
+    testdat[,"Cluster"] <- factor(testdat[,"Cluster"])
+    testdat[,"Cluster"] <- factor(testdat[,"Cluster"], levels = lv)
+
+    p <- ggplot(testdat, aes(x = Cluster)) +
+        geom_bar() + 
+        scale_y_log10() +
+        theme_minimal() + 
+        ggtitle(sce@name)
+    return(p)
 }
 
 #' Run DE of DIEM clusters
@@ -277,25 +404,25 @@ diem.filter <- function(sample_id,
                         seur_file = "seur.rds", 
                         sce_file = "sce.rds"){
 
-    sce_dir <- file.path(data_dir, sample_id)
-    sce_f <- file.path(sce_dir, sce_file)
+    sce_f <- file.path(data_dir, sce_file)
     sce <- readRDS(sce_f)
 
-    md <- sce@test_data
+    td <- sce@test_data
 
     sdk <- (! td[,"Cluster"] %in% bg_clust ) & ( td[,"n_genes"] >= min_genes )
 
     k <- rownames(td)[sdk]
-    counts <- sce@counts[,k]
-    td <- td[k,]
+    counts <- sce@counts[,k,drop=FALSE]
+    td <- td[k,,drop=FALSE]
 
     seur <- Seurat::CreateSeuratObject(counts = counts,
-                                       meta.data = md,
+                                       meta.data = td,
                                        names.delim = "}",
                                        project = sample_id)
 
     dir.create(seur_dir, recursive = TRUE, showWarnings = FALSE)
     ofn <- paste0(seur_dir, seur_file)
     saveRDS(seur, ofn)
+    return(seur)
 }
 

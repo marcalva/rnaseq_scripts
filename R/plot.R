@@ -214,9 +214,7 @@ plot_umap_c <- function(x,
         scale_color_gradient(low=low, 
                              high=high, 
                              trans = trans, 
-                             name=legend_title) + 
-        guides(colour = guide_legend(override.aes = list(size=legend_pt_size, 
-                                                         alpha = 1)))
+                             name=legend_title) 
     return(p)
 }
 
