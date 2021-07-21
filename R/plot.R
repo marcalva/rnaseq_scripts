@@ -26,14 +26,14 @@ heatmap.p <- function(x, p, legend_name = "Value",
     plong <- reshape2::melt(pmark)
     xdf[,"Significance"] <- plong$value
 
-    ret <- ggplot(xdf, aes_string(x = "Var1", y = "Var2")) +
-    geom_tile(aes(fill = value)) +
+    ret <- ggplot(xdf, aes_string(x = "Var1", y = "Var2", fill = "value")) +
+    geom_tile() +
+    geom_text(aes_string(label = "Significance"), size=4) + 
     scale_fill_gradient2(low=low, mid=mid, high=high,
                          name = legend_name) +
     theme_classic() + labs(x="", y="") +
     theme(axis.ticks = element_blank(), panel.background = element_blank(),
-          axis.text.x = element_text(size = 10, angle = 45, hjust = 1, colour = "grey50")) +
-    geom_text(aes_string(label = "Significance"), size=4)
+          axis.text.x = element_text(size = 10, angle = 45, hjust = 1, colour = "grey50"))
 
     return(ret)
 }
