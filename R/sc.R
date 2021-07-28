@@ -75,3 +75,115 @@ barcode_rank_plot <- function(sce, title = "Barcode-rank", ret = TRUE){
     else print(p)
 }
 
+#' Get proportions from the columns of a data frame
+#'
+#' @param x A data frame
+#' @param c1 Column 1, which will be the rows of the proportions
+#' @param c2 Column 2, which will be the columns of the proportions
+#' @param prop Whether to return proportions (TRUE) or counts (FALSE). Default is TRUE.
+#'
+#' @return data frame
+get_props <- function(x, c1="orig.ident", c2="seurat_clusters", prop=TRUE){
+    datf <- table(x[,c2], x[,c1])
+    if (prop){
+        datf <- sweep(datf, 2, colSums(datf), "/")
+    }
+    datf <- as.data.frame.array(datf)
+    return(datf)
+}
+
+#' Collapse expression along cell types
+#'
+#' @param x Sparse matrix of counts, the raw gene-barcode matrix
+#' @param identities Character or factor vector of cell type identities. 
+#'  Each element corresponds to the column in x.
+#' @param counts Whether to return counts or normalized counts.
+#' @param scale_size If normalizing, scale so column sums equal this size.
+#' @param scale_cells Whether to scale so column sums are all equal.
+#' @param logt Whether to log1p transform the counts.
+#'
+#' @return matrix, with rows corresponding to genes and columns 
+#'  corresponding to identities.
+collapse = function(x, 
+                    identities, 
+                    counts=FALSE, 
+                    scale_size=1e4, 
+                    scale_cells=TRUE,
+                    logt=TRUE){
+    require(Matrix)
+    if (is.null(attr(class(x), "package")) || 
+        attr(class(x), "package") != "Matrix"){
+        x <- Matrix::Matrix(x)
+    }
+    ngenes <- nrow(x)
+    if (class(identities) != "factor"){
+        identities <- factor(identities)
+    }
+    celltypes <- levels(identities)
+    ncells <- table(identities)[celltypes]
+    panel <- matrix(0, nrow=ngenes, ncol=length(celltypes))
+    rownames(panel) <- rownames(x)
+    colnames(panel) <- celltypes
+    for (celltype in celltypes){
+        panel[,celltype] <- Matrix::rowSums(x[,identities == celltype,drop=FALSE])
+    }
+
+    if (counts) return(panel)
+
+    cs <- colSums(panel)
+    cs[cs == 0] <- 1
+    panel <- sweep(panel, 2, cs, "/")
+    
+    if (scale_cells){
+        panel <- scale_size*panel
+    }
+    
+    if (logt){
+        panel <- log1p(panel)
+    }
+
+    return(panel)
+}
+
+#' Collapse counts across 2 factors
+#' 
+#' 
+collapse2d <- function(x, 
+                       ix1, 
+                       ix2){
+    require(Matrix)
+
+    if (is.null(attr(class(x), "package")) || 
+        attr(class(x), "package") != "Matrix"){
+        x <- Matrix::Matrix(x)
+    }
+
+    if (length(ix1) != ncol(x) || length(ix2) != ncol(x))
+        stop("i1 and i2 must have length equal to number of columns in x")
+
+    i1 <- rownames(x)
+    i1n <- rownames(x)
+    i2 <- factor(ix1)
+    i2n <- levels(i2)
+    i3 <- factor(ix2)
+    i3n <- levels(i3)
+
+    panel <- array(data = NA, 
+                   dim = c(length(i1n), length(i2n), length(i3n)), 
+                   dimnames = list(i1n, i2n, i3n))
+
+    for (k in i3n){
+        for (j in i2n){
+            colkeep <- i2 == j & i3 == k
+            panel[,j,k] <- Matrix::rowSums(x[,colkeep,drop=FALSE])
+        }
+    }
+
+    return(panel)
+}
+
+
+
+
+
+
