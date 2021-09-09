@@ -8,6 +8,7 @@
 #' @param sep is the separator if gene names are not unique, 
 #'   the argument to make.unique function
 read_solo_counts <- function(p, gene_col = 1, sep = "."){
+    require(Matrix)
     mtx_file <- file.path(p, "matrix.mtx")
     genes_file <- file.path(p, "features.tsv")
     barcode_file <- file.path(p, "barcodes.tsv")
